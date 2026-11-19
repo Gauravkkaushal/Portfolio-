@@ -52,8 +52,7 @@ labs.forEach(b => b.onclick = () => enter());
 // ======================= canvas =======================
 const cv = $("world"); let cx = cv.getContext("2d");
 const wv = $("wind"), wx = wv.getContext("2d"); // the breeze has its own canvas, over the hanging screens
-const tv = $("trail"), tx = tv.getContext("2d"); // the name's dust trail, over the whole site
-let trailA = 0, docH = 0, docHAt = 0, markX = 0;
+const tv = $("trail"), tx = tv.getContext("2d"); // dust flying between page titles, over the whole site
 let W, H, DPR, R, L, plate;
 const wedgeT = new Array(N).fill(-1);  // time each wedge was revealed
 
@@ -136,7 +135,7 @@ function webRing(c, i, r, j) {
 function resize() {
   DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
   cv.width = wv.width = W * DPR; cv.height = wv.height = H * DPR;
-  tv.width = W * DPR; tv.height = H * DPR; docH = 0;
+  tv.width = W * DPR; tv.height = H * DPR;
   const nr = Math.round(Math.min(W, H) * (W < 700 ? .36 : .3));
   if (nr !== R) { R = nr; $("dial").style.setProperty("--R", R + "px"); buildPlate(); }
 }
@@ -376,30 +375,55 @@ function drawParts(now) {
   if (now > partEnd + 400 && landed === parts.length) { parts = []; mark.style.opacity = ""; }
 }
 
-// ======================= trail: the name's dust flows on from the top bar down the whole site =======================
-// once the burst has landed, a stream of the same dust leaves the bar name and winds down the page through every section,
-// so scrolling follows it from the hall to Work, About and the end. Points live in page space, only the visible ones are drawn
-const TRAIL = Array.from({ length: 2400 }, (_, i) => { const r = rng(i * 59 + 13); r(); return [r(), (r() - .5) * 2, .6 + r() * .8, r() * 7, r() < .08, .9 + r() * 1.3]; });
-function trailX(y) { // the stream's centre line: from the bar name out to the middle, then winding side to side down the page
-  const k = clamp(y / (H * .9)), mid = W / 2 + Math.sin(y / (H * 1.15) + .6) * W * .26 * k;
-  return lerp(markX, mid, eio(k));
+// ======================= hop: on a page change, the title's dust flies to the next page's title =======================
+// pages: the hall (its title is the bar name), Work ("What I make"), About. Moving from one to the next, the old title
+// dissolves into dust that flies to the new title and forms it, so each page hands over to the next
+const TITLES = [".bar__mark", "#make-h", "#op-h"].map(q => document.querySelector(q));
+// every text pixel of a title, relative to the title's box: each text run is drawn in its own font where it sits
+function sampleTitle(el) {
+  const er = el.getBoundingClientRect(), o = document.createElement("canvas"); o.width = Math.ceil(er.width) + 8; o.height = Math.ceil(er.height) + 8;
+  const c = o.getContext("2d"), w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); c.fillStyle = "#fff"; c.textBaseline = "middle";
+  for (let n; (n = w.nextNode());) { if (!n.textContent.trim()) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n); const r = rg.getBoundingClientRect(), cs = getComputedStyle(n.parentElement);
+    c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`; c.fillText(n.textContent, r.left - er.left + 4, r.top - er.top + 4 + r.height / 2); }
+  const d = c.getImageData(0, 0, o.width, o.height).data, P = [], step = er.height > 40 ? 3 : 2;
+  for (let y = 0; y < o.height; y += step) for (let x = 0; x < o.width; x += step) if (d[(y * o.width + x) * 4 + 3] > 120) P.push([x - 4, y - 4]);
+  return P;
 }
-function drawTrail(now) {
+let page = -1, hop = null; // hop: { from, to, dots, t0, end }
+const pageAt = () => { const m = innerHeight * .5; return $("about").getBoundingClientRect().top < m ? 2 : $("work").getBoundingClientRect().top < m ? 1 : 0; };
+function startHop(a, b) {
+  if (hop) { hop.from.style.opacity = ""; hop.to.style.opacity = ""; } // a hop still flying is cut short, both titles shown again
+  const from = TITLES[a], to = TITLES[b], fr = from.getBoundingClientRect(), S = sampleTitle(from), T = sampleTitle(to);
+  if (!S.length || !T.length) return;
+  // a title already scrolled off screen sheds its dust from that edge of the screen, so the flight is always seen
+  const top = fr.bottom < 0 ? 6 : fr.top > innerHeight ? innerHeight - fr.height - 6 : fr.top;
+  const t0 = performance.now(), k = Math.max(1, Math.ceil(S.length / 1400)), dots = []; // at most ~1400 dots
+  for (let i = 0; i < S.length; i += k) { const [sx, sy] = S[i], [tx0, ty0] = T[Math.random() * T.length | 0], a2 = Math.random() * 2 * Math.PI, sp = 60 + Math.random() * 160;
+    dots.push({ sx: fr.left + sx, sy: top + sy, tx: tx0, ty: ty0, ox: Math.cos(a2) * sp, oy: Math.sin(a2) * sp * .7,
+      t0: t0 + sx / Math.max(1, fr.width) * 260 + Math.random() * 280, dur: 1100 + Math.random() * 450, ph: Math.random() * 7, hot: Math.random() < .07 }); }
+  to.style.opacity = 0; hop = { from, to, dots, t0, end: t0 + 2000 };
+}
+function drawHop(now) {
   tx.setTransform(1, 0, 0, 1, 0, 0); tx.clearRect(0, 0, tv.width, tv.height);
-  trailA += ((entered && !parts.length ? 1 : 0) - trailA) * .025;
-  if (trailA < .01) return;
-  if (now - docHAt > 1000 || !docH) { docHAt = now; docH = root.scrollHeight; const m = document.querySelector(".bar__mark").getBoundingClientRect(); markX = m.left + m.width / 2; }
-  const t = motion ? now / 1000 : 0, sy = scrollY;
-  tx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  for (const [s0, off, sp, ph, hot, sz] of TRAIL) {
-    const y = (s0 * docH + t * 46 * sp) % docH, yv = y - sy;
-    if (yv < -8 || yv > H + 8) continue;
-    const spread = 12 + 34 * clamp(y / H) * (.6 + .4 * Math.sin(y / 380 + ph)); // thin where it leaves the name, wider further down
-    const x = trailX(y) + off * spread + Math.sin(t * .8 + ph) * 6;
-    const a = trailA * clamp((y - 30) / 120) * (.35 + .45 * Math.abs(Math.sin(t * 1.3 + ph * 3)));
-    tx.globalAlpha = a; tx.fillStyle = hot ? "#fb5e28" : "#f2f2ef"; tx.fillRect(x - sz / 2, yv - sz / 2, sz, sz);
+  const p = entered && !parts.length && motion ? pageAt() : page; // pages count only once the intro burst has landed
+  if (p !== page) { if (page >= 0 && entered && !parts.length && motion) startHop(page, p); page = p; }
+  if (!hop) return;
+  const { from, to, dots } = hop, tr = to.getBoundingClientRect(); // the new title can still be scrolling, so the dots chase where it is now
+  from.style.opacity = 1 - clamp((now - hop.t0) / 300); // the old title dissolves as its dust leaves
+  tx.setTransform(DPR, 0, 0, DPR, 0, 0); let landed = 0;
+  for (const d of dots) {
+    const u = clamp((now - d.t0) / d.dur), e = eio(u), q = 1 - e, wob = Math.sin(now / 160 + d.ph) * 6 * Math.sin(Math.PI * u);
+    if (u >= 1) landed++;
+    const ex = tr.left + d.tx, ey = tr.top + d.ty, kx = (d.sx + ex) / 2 + d.ox, ky = (d.sy + ey) / 2 + d.oy; // blown out sideways, then curving in
+    const x = q * q * d.sx + 2 * q * e * kx + e * e * ex + wob, y = q * q * d.sy + 2 * q * e * ky + e * e * ey + wob * .6;
+    const after = Math.max(0, now - d.t0 - d.dur) / 350, s = lerp(1.8, 1, e);
+    tx.globalAlpha = clamp(u * 6) * (1 - clamp(after)); if (tx.globalAlpha <= 0) continue;
+    tx.fillStyle = d.hot ? "#fb5e28" : "#f2f2ef"; tx.fillRect(x - s / 2, y - s / 2, s, s);
   }
   tx.globalAlpha = 1;
+  to.style.opacity = eio(landed / dots.length); // the new title fills in as its dust lands
+  if (now > hop.end + 400 && landed === dots.length) { from.style.opacity = ""; to.style.opacity = ""; hop = null; } // the old title comes back for the way up
 }
 
 // ======================= gate title cards =======================
@@ -869,7 +893,7 @@ function frame(now) {
   const mr = mk.getBoundingClientRect(), mp = clamp(-mr.top / (mk.offsetHeight - vh)) || 0;
   setMake(Math.min(MAKE.length - 1, Math.floor(mp * MAKE.length)));
   frameOp(now);
-  drawTrail(now);
+  drawHop(now);
 
   if (now - lastFilm > 33) {
     lastFilm = now; const ts = motion ? now / 1000 : 2;
