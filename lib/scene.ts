@@ -390,7 +390,7 @@ function sampleTitle(el) {
   for (let y = 0; y < o.height; y += step) for (let x = 0; x < o.width; x += step) if (d[(y * o.width + x) * 4 + 3] > 120) P.push([x - 4, y - 4]);
   return P;
 }
-let page = -1, hop = null; // hop: { from, to, dots, t0, end }
+let page = -1, hop = null; const RIP = 550; // hop: { from, to, dots, t0, end }
 const pageAt = () => { const m = innerHeight * .5; return $("about").getBoundingClientRect().top < m ? 2 : $("work").getBoundingClientRect().top < m ? 1 : 0; };
 function startHop(a, b) {
   if (hop) { hop.from.style.opacity = ""; hop.to.style.opacity = ""; } // a hop still flying is cut short, both titles shown again
@@ -399,10 +399,11 @@ function startHop(a, b) {
   // a title already scrolled off screen sheds its dust from that edge of the screen, so the flight is always seen
   const top = fr.bottom < 0 ? 6 : fr.top > innerHeight ? innerHeight - fr.height - 6 : fr.top;
   const t0 = performance.now(), k = Math.max(1, Math.ceil(S.length / 1400)), dots = []; // at most ~1400 dots
-  for (let i = 0; i < S.length; i += k) { const [sx, sy] = S[i], [tx0, ty0] = T[Math.random() * T.length | 0], a2 = Math.random() * 2 * Math.PI, sp = 60 + Math.random() * 160;
-    dots.push({ sx: fr.left + sx, sy: top + sy, tx: tx0, ty: ty0, ox: Math.cos(a2) * sp, oy: Math.sin(a2) * sp * .7,
-      t0: t0 + sx / Math.max(1, fr.width) * 260 + Math.random() * 280, dur: 1100 + Math.random() * 450, ph: Math.random() * 7, hot: Math.random() < .07 }); }
-  to.style.opacity = 0; hop = { from, to, dots, t0, end: t0 + 2000 };
+  // first the old title ripples in place as a wave (RIP ms), then its dust peels off left to right as one ribbon
+  for (let i = 0; i < S.length; i += k) { const [sx, sy] = S[i], [tx0, ty0] = T[Math.random() * T.length | 0];
+    dots.push({ sx: fr.left + sx, sy: top + sy, tx: tx0, ty: ty0, th: (Math.random() - .5) * 16,
+      t0: t0 + RIP + sx / Math.max(1, fr.width) * 520 + Math.random() * 120, dur: 1500 + Math.random() * 300, ph: Math.random() * 7, hot: Math.random() < .07 }); }
+  to.style.opacity = 0; hop = { from, to, dots, t0, end: t0 + RIP + 2450 };
 }
 function drawHop(now) {
   tx.setTransform(1, 0, 0, 1, 0, 0); tx.clearRect(0, 0, tv.width, tv.height);
@@ -410,15 +411,18 @@ function drawHop(now) {
   if (p !== page) { if (page >= 0 && entered && !parts.length && motion) startHop(page, p); page = p; }
   if (!hop) return;
   const { from, to, dots } = hop, tr = to.getBoundingClientRect(); // the new title can still be scrolling, so the dots chase where it is now
-  from.style.opacity = 1 - clamp((now - hop.t0) / 300); // the old title dissolves as its dust leaves
+  const rk = clamp((now - hop.t0) / RIP), rt = (now - hop.t0) / 70; // ripple strength and phase
+  from.style.opacity = 1 - rk; // the old title turns into rippling dust
   tx.setTransform(DPR, 0, 0, DPR, 0, 0); let landed = 0;
   for (const d of dots) {
-    const u = clamp((now - d.t0) / d.dur), e = eio(u), q = 1 - e, wob = Math.sin(now / 160 + d.ph) * 6 * Math.sin(Math.PI * u);
+    const u = clamp((now - d.t0) / d.dur), e = eio(u), rip = Math.sin(d.sx * .06 - rt) * 7 * rk * (1 - e);
     if (u >= 1) landed++;
-    const ex = tr.left + d.tx, ey = tr.top + d.ty, kx = (d.sx + ex) / 2 + d.ox, ky = (d.sy + ey) / 2 + d.oy; // blown out sideways, then curving in
-    const x = q * q * d.sx + 2 * q * e * kx + e * e * ex + wob, y = q * q * d.sy + 2 * q * e * ky + e * e * ey + wob * .6;
-    const after = Math.max(0, now - d.t0 - d.dur) / 350, s = lerp(1.8, 1, e);
-    tx.globalAlpha = clamp(u * 6) * (1 - clamp(after)); if (tx.globalAlpha <= 0) continue;
+    // the flight: a flowing zigzag along the way from the old title to the new one, widest mid-way, shared by every dot so they move as one ribbon
+    const ex = tr.left + d.tx, ey = tr.top + d.ty, dx = ex - d.sx, dy = ey - d.sy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+    const amp = clamp(len * .16, 40, 130), env = Math.sin(Math.PI * e), wave = Math.sin(e * Math.PI * 3 + now / 400) * amp * env + d.th * env;
+    const x = d.sx + dx * e + nx * wave, y = d.sy + dy * e + ny * wave + rip;
+    const after = Math.max(0, now - d.t0 - d.dur) / 350, s = lerp(1.6, 1, e);
+    tx.globalAlpha = Math.min(1, rk * 2) * (1 - clamp(after)); if (tx.globalAlpha <= 0) continue;
     tx.fillStyle = d.hot ? "#fb5e28" : "#f2f2ef"; tx.fillRect(x - s / 2, y - s / 2, s, s);
   }
   tx.globalAlpha = 1;
