@@ -15,6 +15,7 @@ export default function Page() {
         <About />
       </main>
       <Overlays />
+      <canvas id="trail" aria-hidden="true"></canvas>
       <Scene />
     </>
   );

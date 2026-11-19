@@ -52,6 +52,8 @@ labs.forEach(b => b.onclick = () => enter());
 // ======================= canvas =======================
 const cv = $("world"); let cx = cv.getContext("2d");
 const wv = $("wind"), wx = wv.getContext("2d"); // the breeze has its own canvas, over the hanging screens
+const tv = $("trail"), tx = tv.getContext("2d"); // the name's dust trail, over the whole site
+let trailA = 0, docH = 0, docHAt = 0, markX = 0;
 let W, H, DPR, R, L, plate;
 const wedgeT = new Array(N).fill(-1);  // time each wedge was revealed
 
@@ -134,6 +136,7 @@ function webRing(c, i, r, j) {
 function resize() {
   DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
   cv.width = wv.width = W * DPR; cv.height = wv.height = H * DPR;
+  tv.width = W * DPR; tv.height = H * DPR; docH = 0;
   const nr = Math.round(Math.min(W, H) * (W < 700 ? .36 : .3));
   if (nr !== R) { R = nr; $("dial").style.setProperty("--R", R + "px"); buildPlate(); }
 }
@@ -371,6 +374,32 @@ function drawParts(now) {
   // the real name fades in as the dots land, then the dots dissolve into it
   mark.style.opacity = eio(landed / parts.length);
   if (now > partEnd + 400 && landed === parts.length) { parts = []; mark.style.opacity = ""; }
+}
+
+// ======================= trail: the name's dust flows on from the top bar down the whole site =======================
+// once the burst has landed, a stream of the same dust leaves the bar name and winds down the page through every section,
+// so scrolling follows it from the hall to Work, About and the end. Points live in page space, only the visible ones are drawn
+const TRAIL = Array.from({ length: 2400 }, (_, i) => { const r = rng(i * 59 + 13); r(); return [r(), (r() - .5) * 2, .6 + r() * .8, r() * 7, r() < .08, .9 + r() * 1.3]; });
+function trailX(y) { // the stream's centre line: from the bar name out to the middle, then winding side to side down the page
+  const k = clamp(y / (H * .9)), mid = W / 2 + Math.sin(y / (H * 1.15) + .6) * W * .26 * k;
+  return lerp(markX, mid, eio(k));
+}
+function drawTrail(now) {
+  tx.setTransform(1, 0, 0, 1, 0, 0); tx.clearRect(0, 0, tv.width, tv.height);
+  trailA += ((entered && !parts.length ? 1 : 0) - trailA) * .025;
+  if (trailA < .01) return;
+  if (now - docHAt > 1000 || !docH) { docHAt = now; docH = root.scrollHeight; const m = document.querySelector(".bar__mark").getBoundingClientRect(); markX = m.left + m.width / 2; }
+  const t = motion ? now / 1000 : 0, sy = scrollY;
+  tx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for (const [s0, off, sp, ph, hot, sz] of TRAIL) {
+    const y = (s0 * docH + t * 46 * sp) % docH, yv = y - sy;
+    if (yv < -8 || yv > H + 8) continue;
+    const spread = 12 + 34 * clamp(y / H) * (.6 + .4 * Math.sin(y / 380 + ph)); // thin where it leaves the name, wider further down
+    const x = trailX(y) + off * spread + Math.sin(t * .8 + ph) * 6;
+    const a = trailA * clamp((y - 30) / 120) * (.35 + .45 * Math.abs(Math.sin(t * 1.3 + ph * 3)));
+    tx.globalAlpha = a; tx.fillStyle = hot ? "#fb5e28" : "#f2f2ef"; tx.fillRect(x - sz / 2, yv - sz / 2, sz, sz);
+  }
+  tx.globalAlpha = 1;
 }
 
 // ======================= gate title cards =======================
@@ -840,6 +869,7 @@ function frame(now) {
   const mr = mk.getBoundingClientRect(), mp = clamp(-mr.top / (mk.offsetHeight - vh)) || 0;
   setMake(Math.min(MAKE.length - 1, Math.floor(mp * MAKE.length)));
   frameOp(now);
+  drawTrail(now);
 
   if (now - lastFilm > 33) {
     lastFilm = now; const ts = motion ? now / 1000 : 2;
