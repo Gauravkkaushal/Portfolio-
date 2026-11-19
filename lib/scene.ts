@@ -217,15 +217,12 @@ function paintVault(alpha, camZ, gx, gy, gw) {
     else { const ru = .07, rv = .045; cx.moveTo(...uv(ru, 0)); cx.lineTo(...uv(1 - ru, 0)); cx.quadraticCurveTo(...B, ...uv(1, rv)); cx.lineTo(...uv(1, 1 - rv)); cx.quadraticCurveTo(...C, ...uv(1 - ru, 1));
       cx.lineTo(...uv(ru, 1)); cx.quadraticCurveTo(...D, ...uv(0, 1 - rv)); cx.lineTo(...uv(0, rv)); cx.quadraticCurveTo(...A, ...uv(ru, 0)); }
     cx.fill();
-    // a plain slab with one round play button, low on the hall side where it shows past the card in front
+    // a plain slab with one round play button, always at the same spot on every card; hover never changes it
+    // (a button behind a nearer card is drawn too and simply covered, so hovering, which lifts the cover test, cannot make it pop in)
     if (hv > 44 && wv > 22) {
-      // hid: that point of the card sits behind the nearer card. Testing the hall-side end of a row is enough, the cover grows from the wall
-      const hid = (u, t) => { if (!o) return false; const q = uv(u, t); return (q[0] - o[0]) * s > 0 && q[1] > o[1] && q[1] < o[2]; };
-      if (!(hid(.95, .76) && hid(.95, .94))) {
-        const [px, py] = uv(.72, .85), pr = Math.min(wv * .2, hv * .09);
-        cx.fillStyle = `rgba(242,242,239,${.07 + lw2 * .22})`; cx.beginPath(); cx.arc(px, py, pr, 0, 7); cx.fill();
-        cx.fillStyle = `rgba(8,7,9,${.35 + lw2 * .4})`; cx.beginPath(); cx.moveTo(px - pr * .3, py - pr * .42); cx.lineTo(px + pr * .45, py); cx.lineTo(px - pr * .3, py + pr * .42); cx.fill();
-      }
+      const [px, py] = uv(.72, .85), pr = Math.min(wv * .2, hv * .09);
+      cx.fillStyle = `rgba(242,242,239,${.07 + lv * .22})`; cx.beginPath(); cx.arc(px, py, pr, 0, 7); cx.fill();
+      cx.fillStyle = `rgba(8,7,9,${.35 + lv * .4})`; cx.beginPath(); cx.moveTo(px - pr * .3, py - pr * .42); cx.lineTo(px + pr * .45, py); cx.lineTo(px - pr * .3, py + pr * .42); cx.fill();
     }
     // the edge colour is set only when it changes and faded with globalAlpha: a new colour string per card was a real cost
     if (hl > .01) { cx.strokeStyle = `rgba(242,242,239,${.03 + Math.max(L * .75, hl)})`; lastS = ""; }
