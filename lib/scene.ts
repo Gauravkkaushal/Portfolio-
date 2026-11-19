@@ -542,7 +542,7 @@ function placeGates(q, gIn) {
     // rel: how many screens ahead of the camera this one hangs, negative once passed. Arriving after tuning in is the same approach from afar
     const rel = k - q + (1 - gIn) * 1.2, s = rel > -.4 ? 2.6 / (2.6 + rel * 6) : 9, o = clamp((.95 - rel) / .35) * clamp((2.4 - s) / 1), near = Math.abs(rel) < .5;
     g.style.visibility = o > 0 ? "" : "hidden"; g.style.setProperty("--gs", s); g.style.setProperty("--go", o);
-    g.style.setProperty("--gy", `${Math.min(0, -280 * (s - 1))}%`); // a screen you are passing rises out over your head as it grows g.classList.toggle("live", Math.abs(rel) < .06);
+    // a screen you are passing keeps coming toward you, growing and fading past the camera, never sliding up: screens travel back to front g.classList.toggle("live", Math.abs(rel) < .06);
     const v = g.querySelector("video"); if (v && v.dataset.far !== String(+!near)) { v.dataset.far = +!near; syncVid(); } // a film only plays on the screen you are at
   });
 }

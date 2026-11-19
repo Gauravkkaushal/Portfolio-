@@ -73,9 +73,9 @@ main{position:relative}
 .who.in{opacity:1}
 .who.gone{transition:opacity .15s;opacity:0}
 
-/* a far screen is small and sits just below the middle of the one in front, so it is hidden until that one lifts away (--gy) as you fly under it */
+/* a far screen is small and sits behind the one in front, so it shows as that one grows past the camera and fades */
 .gate{position:absolute;z-index:2;left:50%;top:27svh;width:var(--gw);transform-origin:50% 60%;will-change:transform,opacity;
-  transform:translate(-50%,var(--gy,0%)) scale(var(--gs,.08));opacity:var(--go,0);pointer-events:none}
+  transform:translate(-50%,0) scale(var(--gs,.08));opacity:var(--go,0);pointer-events:none}
 .gate.live{pointer-events:auto}
 .frame{position:relative;aspect-ratio:16/9;border-radius:var(--r);overflow:hidden;background:#000;isolation:isolate;box-shadow:0 20px 80px -20px rgba(0,0,0,.8)}
 .frame canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
