@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ShopMall film</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#090c12;display:grid;place-items:center;overflow:hidden}
+canvas{width:min(100vw,100vh*16/9);aspect-ratio:16/9;display:block}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 15 s seamless loop for the portfolio ShopMall card. Flow and code come from the repo
+// (homePage add-to-cart + toast, productRoute protect/adminOnly, cartPage reduce total). Products are demo items.
+const W = 1920, H = 1080, T = 15;
+const cv = document.getElementById("c"), x = cv.getContext("2d");
+const C = { bg:"#0a0d0b", card:"#141814", card2:"#1b211b", ink:"#f2f2ef", mut:"#a2a89f", dim:"#5f665d",
+  lime:"#d6f24c", blu:"#60a5fa", pur:"#a855f7", org:"#ff7d32", grn:"#22c55e", red:"#ff4d5e" };
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = v => 1 - Math.pow(1 - clamp(v), 3);
+const eio = v => (v = clamp(v), v < .5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2);
+const back = v => { v = clamp(v); const c = 1.6; return 1 + (c + 1) * Math.pow(v - 1, 3) + c * Math.pow(v - 1, 2); };
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const env = (t, a, b, f = .4) => Math.min(ease(seg(t, a, a + f)), 1 - eio(seg(t, b - f, b)));
+const lerp = (a, b, k) => a + (b - a) * k;
+const F = (w, s, mono) => x.font = `${w} ${s}px ${mono ? '"Martian Mono"' : "Sora"}, sans-serif`;
+const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
+function rr(X, Y, w, h, r, fill, stroke, lw = 1.5) {
+  x.beginPath(); x.roundRect(X, Y, w, h, r);
+  if (fill) { x.fillStyle = fill; x.fill(); }
+  if (stroke) { x.strokeStyle = stroke; x.lineWidth = lw; x.stroke(); }
+}
+function text(s, X, Y, col, align = "left") { x.fillStyle = col; x.textAlign = align; x.fillText(s, X, Y); }
+function swoosh(X, Y, w, k, col, lw = 7) {
+  if (k <= 0) return; x.strokeStyle = col; x.lineWidth = lw; x.lineCap = "round";
+  x.beginPath(); x.moveTo(X, Y); x.quadraticCurveTo(X + w * k / 2, Y - 12, X + w * k, Y); x.stroke();
+}
+function check(X, Y, r, col = C.grn) {
+  x.fillStyle = col; x.beginPath(); x.arc(X, Y, r, 0, 7); x.fill();
+  x.strokeStyle = "#fff"; x.lineWidth = r * .22; x.lineCap = "round"; x.beginPath();
+  x.moveTo(X - r * .45, Y); x.lineTo(X - r * .1, Y + r * .38); x.lineTo(X + r * .5, Y - r * .35); x.stroke();
+}
+function bag(X, Y, s, col = C.lime) { // shopping-bag mark
+  x.save(); x.translate(X, Y); x.scale(s / 100, s / 100);
+  rr(8, 30, 84, 70, 16, col);
+  x.strokeStyle = col; x.lineWidth = 9; x.lineCap = "round"; x.beginPath(); x.arc(50, 32, 20, Math.PI, 0); x.stroke();
+  x.fillStyle = "#0f1a12"; x.beginPath(); x.arc(36, 52, 5, 0, 7); x.arc(64, 52, 5, 0, 7); x.fill();
+  x.restore();
+}
+function cartIcon(X, Y, s, col) {
+  x.strokeStyle = col; x.lineWidth = s * .09; x.lineCap = "round"; x.lineJoin = "round"; x.beginPath();
+  x.moveTo(X, Y); x.lineTo(X + s * .18, Y); x.lineTo(X + s * .32, Y + s * .62); x.lineTo(X + s * .9, Y + s * .62); x.lineTo(X + s, Y + s * .2); x.lineTo(X + s * .24, Y + s * .2); x.stroke();
+  x.fillStyle = col; x.beginPath(); x.arc(X + s * .38, Y + s * .82, s * .08, 0, 7); x.arc(X + s * .82, Y + s * .82, s * .08, 0, 7); x.fill();
+}
+// product art, drawn in a unit box
+const ART = {
+  phones(s) { x.strokeStyle = "#111"; x.lineWidth = s * .09; x.lineCap = "round"; x.beginPath(); x.arc(s * .5, s * .55, s * .3, Math.PI * 1.05, Math.PI * 1.95); x.stroke();
+    rr(s * .14, s * .5, s * .16, s * .3, s * .07, "#111"); rr(s * .7, s * .5, s * .16, s * .3, s * .07, "#111"); },
+  watch(s) { rr(s * .38, s * .08, s * .24, s * .84, s * .08, "#222"); rr(s * .26, s * .28, s * .48, s * .44, s * .12, "#111");
+    rr(s * .31, s * .33, s * .38, s * .34, s * .08, "#0d2b3d"); x.strokeStyle = C.lime; x.lineWidth = s * .03; x.beginPath(); x.arc(s * .5, s * .5, s * .1, -1.5, 2.6); x.stroke(); },
+  shoe(s) { x.fillStyle = "#fff"; x.beginPath(); x.moveTo(s * .1, s * .62); x.quadraticCurveTo(s * .14, s * .36, s * .34, s * .34); x.lineTo(s * .48, s * .5);
+    x.quadraticCurveTo(s * .8, s * .52, s * .9, s * .66); x.lineTo(s * .9, s * .72); x.lineTo(s * .1, s * .72); x.closePath(); x.fill();
+    x.fillStyle = "#111"; x.fillRect(s * .1, s * .72, s * .8, s * .07); x.strokeStyle = "#ff7d32"; x.lineWidth = s * .03; x.beginPath(); x.moveTo(s * .3, s * .6); x.lineTo(s * .7, s * .6); x.stroke(); },
+  phone(s) { rr(s * .3, s * .08, s * .4, s * .84, s * .07, "#111"); const g = x.createLinearGradient(0, s * .1, 0, s * .9); g.addColorStop(0, C.blu); g.addColorStop(1, C.pur);
+    rr(s * .33, s * .12, s * .34, s * .76, s * .05, g); rr(s * .44, s * .15, s * .12, s * .03, s * .015, "#111"); }
+};
+const PRODUCTS = [["Wireless Headphones", 2999, "phones", ["#fde68a", "#f59e0b"]], ["Smart Watch", 4499, "watch", ["#bbf7d0", "#4ade80"]],
+  ["Running Shoes", 3299, "shoe", ["#fecaca", "#fb7185"]], ["Smartphone", 50000, "phone", ["#c7d2fe", "#818cf8"]]];
+function product(p, X, Y, w, h, opts = {}) {
+  const [name, price, art, [g0, g1]] = p;
+  rr(X, Y, w, h, 20, "#fff", "rgba(0,0,0,.06)");
+  const g = x.createLinearGradient(X, Y, X + w, Y + h * .6); g.addColorStop(0, g0); g.addColorStop(1, g1);
+  x.save(); x.beginPath(); x.roundRect(X + 10, Y + 10, w - 20, h * .56, 14); x.fillStyle = g; x.fill(); x.clip();
+  const s = h * .5; x.translate(X + w / 2 - s / 2, Y + 14 + (opts.lift || 0)); ART[art](s); x.restore();
+  F(700, 21); text(name, X + 20, Y + h * .56 + 40, "#111827");
+  F(500, 16); text("★★★★★", X + 20, Y + h * .56 + 72, "#f59e0b");
+  F(800, 24); text(inr(price), X + 20, Y + h - 30, "#111827");
+  const press = opts.press ? .92 : 1, bx = X + w - 66, by = Y + h - 54;
+  x.save(); x.translate(bx + 23, by + 23); x.scale(press, press);
+  rr(-23, -23, 46, 46, 23, opts.added ? C.grn : "#111827"); if (opts.added) check(0, 0, 13, C.grn); else cartIcon(-11, -10, 22, "#fff");
+  x.restore();
+}
+const STEPS = [[0, 3.4, "01  BROWSE"], [3.4, 7, "02  CART"], [7, 10.6, "03  SECURE"], [10.6, 13, "04  CHECKOUT"]];
+
+// ---------- background + slate ----------
+function bg(t) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, W, H);
+  const p = t / T * Math.PI * 2;
+  for (const [cx, cy, r, col] of [[1500 + Math.cos(p) * 120, 220 + Math.sin(p) * 80, 950, "rgba(214,242,76,.12)"], [300 + Math.sin(p) * 140, 900 + Math.cos(p) * 60, 800, "rgba(96,165,250,.09)"]]) {
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+  }
+  x.fillStyle = "rgba(242,242,239,.05)";
+  for (let gx = 60; gx < W; gx += 48) for (let gy = 60; gy < H; gy += 48) x.fillRect(gx, gy, 2, 2);
+}
+function slate(t) {
+  const a = ease(seg(t, 0, .4)) - eio(seg(t, 12.7, 13.2));
+  if (a <= 0) return; x.globalAlpha = a;
+  F(600, 20, 1); x.textBaseline = "middle";
+  x.fillStyle = C.lime; x.beginPath(); x.arc(146, 82, 6, 0, 7); x.fill();
+  text("SHOPMALL", 164, 82, C.ink);
+  const st = STEPS.find(s => t >= s[0] && t < s[1]) || STEPS[3];
+  text(st[2], 1780, 82, C.mut, "right");
+  STEPS.forEach(([a0, b0], i) => {
+    const X = 1652 + i * 34; rr(X, 104, 28, 4, 2, "rgba(242,242,239,.15)");
+    const k = seg(t, a0, b0); if (k > 0) rr(X, 104, 28 * k, 4, 2, C.lime);
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 01 browse ----------
+function browse(t) {
+  const a = env(t, 0, 3.6, .45); if (a <= 0) return;
+  x.textBaseline = "alphabetic";
+  x.globalAlpha = a; F(600, 22, 1); text("MERN · MONGODB · EXPRESS · REACT · NODE", 140, 300, C.org);
+  F(800, 92);
+  const l1 = ease(seg(t, .15, .8)), l2 = ease(seg(t, .3, .95));
+  x.globalAlpha = a * l1; text("From catalogue", 140, 410 + (1 - l1) * 30, C.ink);
+  x.globalAlpha = a * l2; text("to cart", 140, 515 + (1 - l2) * 30, C.lime); text("in one flow.", 140, 620 + (1 - l2) * 30, C.ink);
+  x.globalAlpha = a; swoosh(140, 545, x.measureText("to cart").width, ease(seg(t, 1, 1.5)), C.org);
+  F(400, 26); x.globalAlpha = a * ease(seg(t, .8, 1.3));
+  text("Product grid, live cart count, JWT auth", 140, 720, C.mut); text("and an admin dashboard.", 140, 758, C.mut);
+  x.textBaseline = "middle";
+  x.globalAlpha = a * ease(seg(t, .2, .6)); F(700, 30); text("Trending Now", 1080, 200, C.ink);
+  F(600, 18); text("View All", 1780, 200, C.blu, "right");
+  PRODUCTS.forEach((p, i) => {
+    const k = back(seg(t, .3 + i * .18, .9 + i * .18)), X = 1080 + (i % 2) * 360, Y = 240 + Math.floor(i / 2) * 330;
+    x.globalAlpha = a * clamp(k); product(p, X, Y + (1 - k) * 60, 340, 310, { lift: Math.sin(t * 2 + i) * 4 });
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 02 cart: add two items, toast + live badge ----------
+const WX = 140, WY = 150, WW = 1640, WH = 760;
+function store(t) {
+  const L = t - 3.4; if (t < 3.2 || t > 7.3) return;
+  const a = env(t, 3.3, 7.25, .45), k = ease(seg(t, 3.3, 3.9));
+  x.save(); x.globalAlpha = a; x.translate(0, (1 - k) * 40); x.textBaseline = "middle";
+  x.shadowColor = "rgba(0,0,0,.6)"; x.shadowBlur = 80; x.shadowOffsetY = 30; rr(WX, WY, WW, WH, 24, "#f9fafb"); x.shadowColor = "transparent";
+  // dark glass navbar like the app
+  rr(WX, WY, WW, 84, 24, "#111827"); x.fillStyle = "#111827"; x.fillRect(WX, WY + 40, WW, 44);
+  bag(WX + 34, WY + 18, 46); F(800, 28); text("ShopMall", WX + 92, WY + 44, "#fff");
+  F(500, 18); ["Home", "Products", "Admin"].forEach((n, i) => text(n, WX + 640 + i * 130, WY + 44, "rgba(255,255,255,.7)"));
+  const count = L > 2.25 ? 2 : L > 1.15 ? 1 : 0, bump = Math.max(back(seg(L, 1.15, 1.45)) * (L < 1.6 ? 1 : 0), back(seg(L, 2.25, 2.55)) * (L > 2.2 && L < 2.7 ? 1 : 0));
+  const CX = WX + WW - 230, CY = WY + 30;
+  cartIcon(CX, CY, 32, "#fff");
+  if (count) { x.save(); x.translate(CX + 32, CY + 2); const s = 1 + (bump > 0 && bump < 1 ? (1 - Math.abs(bump - .5) * 2) * .5 : 0); x.scale(s, s);
+    x.fillStyle = C.red; x.beginPath(); x.arc(0, 0, 13, 0, 7); x.fill(); F(700, 15); text(String(count), 0, 1, "#fff", "center"); x.restore(); }
+  rr(WX + WW - 160, WY + 24, 130, 40, 20, "rgba(255,255,255,.12)"); F(600, 17); text("Ananya", WX + WW - 95, WY + 44, "#fff", "center");
+  // grid of 4
+  F(800, 34); text("Trending Now", WX + 60, WY + 140, "#111827");
+  const pw = (WW - 120 - 3 * 30) / 4;
+  PRODUCTS.forEach((p, i) => {
+    const X = WX + 60 + i * (pw + 30), Y = WY + 190;
+    const press = (i === 0 && L > .95 && L < 1.15) || (i === 1 && L > 2.05 && L < 2.25), added = (i === 0 && L > 1.15) || (i === 1 && L > 2.25);
+    product(p, X, Y, pw, 440, { press, added });
+  });
+  // item flies to cart
+  [[0, 1.15], [1, 2.25]].forEach(([i, s]) => {
+    const fk = eio(seg(L, s, s + .55)); if (fk <= 0 || fk >= 1) return;
+    const sx = WX + 60 + i * (pw + 30) + pw - 43, sy = WY + 190 + 440 - 31;
+    const fx = lerp(sx, CX + 16, fk), fy = lerp(sy, CY + 16, fk) - Math.sin(fk * Math.PI) * 140;
+    x.fillStyle = C.lime; x.beginPath(); x.arc(fx, fy, 16 * (1 - fk * .5), 0, 7); x.fill();
+  });
+  // react-hot-toast
+  [[1.15, 2.15], [2.25, 3.4]].forEach(([s, e]) => {
+    const tk = env(L, s, e, .25); if (tk <= 0) return;
+    x.globalAlpha = a * tk; const TX = WX + WW / 2 - 140, TY = WY + 104 - (1 - tk) * 30;
+    x.shadowColor = "rgba(0,0,0,.18)"; x.shadowBlur = 24; x.shadowOffsetY = 6; rr(TX, TY, 280, 58, 12, "#fff"); x.shadowColor = "transparent";
+    check(TX + 32, TY + 29, 13); F(600, 19); text("Added to Cart!", TX + 56, TY + 30, "#111827");
+  });
+  x.globalAlpha = a;
+  // cursor
+  const path = [[1500, 900, 0], [WX + 60 + pw - 43, WY + 630 - 8, .95], [WX + 60 + pw - 43, WY + 630 - 8, 1.6], [WX + 90 + 2 * pw - 43, WY + 630 - 8, 2.05], [WX + 90 + 2 * pw - 43, WY + 630 - 8, 9]];
+  let cx = path[0][0], cy = path[0][1];
+  for (let j = 1; j < path.length; j++) { const [x0, y0, t0] = path[j - 1], [x1, y1, t1] = path[j]; if (L >= t0) { const kk = eio(seg(L, t0 + (j === 1 ? .3 : 0), t1)); cx = lerp(x0, x1, kk); cy = lerp(y0, y1, kk); } }
+  if (L > .3) {
+    x.fillStyle = "#111827"; x.strokeStyle = "#fff"; x.lineWidth = 2.5; x.beginPath();
+    x.moveTo(cx, cy); x.lineTo(cx, cy + 34); x.lineTo(cx + 9, cy + 26); x.lineTo(cx + 16, cy + 40); x.lineTo(cx + 22, cy + 37); x.lineTo(cx + 15, cy + 23); x.lineTo(cx + 26, cy + 23); x.closePath(); x.fill(); x.stroke();
+  }
+  x.restore(); x.globalAlpha = 1;
+}
+
+// ---------- 03 secure: the real route, two requests ----------
+function secure(t) {
+  const L = t - 7; if (t < 6.8 || t > 10.9) return;
+  const a = env(t, 6.9, 10.85, .45); x.textBaseline = "middle";
+  x.globalAlpha = a * ease(seg(L, 0, .4)); F(600, 22, 1); text("Server/routes/productRoute.js", 140, 210, C.org);
+  F(800, 64); x.textBaseline = "alphabetic"; text("Admins launch.", 140, 300, C.ink); text("Everyone else shops.", 140, 380, C.mut); x.textBaseline = "middle";
+  // code line
+  const code = "router.post('/add', protect, adminOnly, createProduct);", n = Math.floor(code.length * seg(L, .3, 1.1));
+  rr(140, 430, 1640, 84, 18, C.card, "rgba(214,242,76,.25)");
+  F(400, 28, 1); x.globalAlpha = a; let cx0 = 180; const parts = [["router.post(", C.mut], ["'/add'", C.org], [", ", C.mut], ["protect", C.blu], [", ", C.mut], ["adminOnly", C.pur], [", ", C.mut], ["createProduct", C.lime], [");", C.mut]];
+  let left = n; for (const [s, col] of parts) { if (left <= 0) break; const sl = s.slice(0, left); text(sl, cx0, 472, col); cx0 += x.measureText(sl).width; left -= s.length; }
+  // pipeline
+  const NODES = [["Request", C.ink, 260], ["protect · JWT", C.blu, 640], ["adminOnly · role", C.pur, 1020], ["MongoDB", C.lime, 1400]];
+  const Y = 680;
+  x.globalAlpha = a * ease(seg(L, 1.0, 1.4));
+  x.strokeStyle = "rgba(242,242,239,.15)"; x.lineWidth = 3; x.setLineDash([8, 10]); x.beginPath(); x.moveTo(260, Y); x.lineTo(1400, Y); x.stroke(); x.setLineDash([]);
+  NODES.forEach(([n2, col, X], i) => {
+    const nk = back(seg(L, 1.0 + i * .1, 1.4 + i * .1)); if (nk <= 0) return; x.globalAlpha = a * clamp(nk);
+    rr(X - 140, Y - 44, 280, 88, 44, C.card, col + "99", 2); F(600, 22); text(n2, X, Y, col, "center");
+  });
+  // two tokens travel: user (blocked), admin (passes)
+  [["user", 1.6, 2.6, 1020, C.red, "403 · Admin only"], ["admin", 2.4, 3.4, 1400, C.grn, "201 · Product launched"]].forEach(([who, s, e, stop, col, res], i) => {
+    const pk = eio(seg(L, s, e)); if (pk <= 0) return;
+    const px = lerp(260, stop - (i ? 0 : 150), pk), py = Y - 80 - i * 0;
+    x.globalAlpha = a * (1 - seg(L, e + .5, e + .8) * .6);
+    rr(px - 70, py - 22, 140, 44, 22, who === "admin" ? C.lime : "#2a2f2a", null); F(600, 18, 1); text(who, px, py, who === "admin" ? "#0f1a12" : C.ink, "center");
+    if (pk >= 1) { const rk = back(seg(L, e, e + .3)); x.globalAlpha = a * clamp(rk); rr(stop - 170, Y + 70 + i * 66, 340, 52, 14, col + "22", col); F(600, 19, 1); text(res, stop, Y + 96 + i * 66, col, "center"); }
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 04 checkout: cart page + reduce() ----------
+function checkout(t) {
+  const L = t - 10.6; if (t < 10.4 || t > 13.4) return;
+  const a = env(t, 10.5, 13.3, .45), k = ease(seg(L, 0, .5)); x.textBaseline = "middle";
+  x.save(); x.globalAlpha = a; x.translate(0, (1 - k) * 40);
+  rr(WX, WY, WW, WH, 24, "#f9fafb");
+  F(800, 36); text("My Shopping Cart", WX + 60, WY + 70, "#111827");
+  [PRODUCTS[0], PRODUCTS[1]].forEach((p, i) => {
+    const ik = ease(seg(L, .2 + i * .15, .6 + i * .15)), Y = WY + 130 + i * 170; x.globalAlpha = a * ik;
+    rr(WX + 60, Y, 960, 150, 18, "#fff", "rgba(0,0,0,.08)");
+    const g = x.createLinearGradient(WX + 76, Y, WX + 196, Y + 120); g.addColorStop(0, p[3][0]); g.addColorStop(1, p[3][1]);
+    rr(WX + 76, Y + 15, 120, 120, 14, g); x.save(); x.translate(WX + 86, Y + 25); ART[p[2]](100); x.restore();
+    F(700, 26); text(p[0], WX + 230, Y + 56, "#111827"); F(500, 18); text("Qty 1", WX + 230, Y + 98, "#6b7280");
+    F(800, 28); text(inr(p[1]), WX + 980, Y + 75, "#111827", "right");
+  });
+  // summary
+  x.globalAlpha = a * ease(seg(L, .4, .8)); const SX = WX + 1060, SY = WY + 130;
+  rr(SX, SY, 520, 470, 20, "#111827");
+  F(600, 18, 1); text("ORDER SUMMARY", SX + 40, SY + 50, "rgba(255,255,255,.6)");
+  const tot = (2999 + 4499) * eio(seg(L, .6, 1.3));
+  F(500, 22); text("Subtotal", SX + 40, SY + 120, "rgba(255,255,255,.75)"); text(inr(tot), SX + 480, SY + 120, "#fff", "right");
+  text("Delivery", SX + 40, SY + 170, "rgba(255,255,255,.75)"); text("Free", SX + 480, SY + 170, C.lime, "right");
+  x.fillStyle = "rgba(255,255,255,.12)"; x.fillRect(SX + 40, SY + 210, 440, 2);
+  F(800, 40); text("Total", SX + 40, SY + 270, "#fff"); text(inr(tot), SX + 480, SY + 270, "#fff", "right");
+  const bk = back(seg(L, 1.5, 1.9)); x.globalAlpha = a * clamp(bk);
+  rr(SX + 40, SY + 350, 440, 80, 40, C.lime); F(700, 26); text("Checkout  →", SX + 260, SY + 390, "#0f1a12", "center");
+  // reduce chip
+  x.globalAlpha = a * ease(seg(L, .9, 1.3)); F(400, 19, 1);
+  rr(WX + 60, WY + 500, 960, 100, 18, "#111827");
+  text("cartItems.reduce((acc, item) =>", WX + 90, WY + 534, C.blu);
+  text("  acc + item.productId.price * item.quantity, 0)", WX + 90, WY + 568, "#e5e7eb");
+  x.restore(); x.globalAlpha = 1;
+}
+
+// ---------- outro ----------
+function outro(t) {
+  const a = env(t, 13.1, 15, .5); if (a <= 0) return;
+  x.textBaseline = "middle"; const k = back(seg(t, 13.1, 13.7));
+  x.globalAlpha = a; x.save(); x.translate(W / 2, 430); x.scale(.85 + k * .15, .85 + k * .15);
+  F(800, 120); const tw = x.measureText("ShopMall").width, s = 104, gap = 36, X0 = -(tw + s + gap) / 2;
+  bag(X0, -s / 2 - 6, s); text("ShopMall", X0 + s + gap, 0, C.ink);
+  x.restore();
+  x.globalAlpha = a * ease(seg(t, 13.4, 13.9)); F(400, 38); const tag = "From catalogue to checkout, in one flow.";
+  text(tag, W / 2, 560, C.mut, "center");
+  const tl = x.measureText(tag).width, kw = x.measureText("in one flow").width;
+  swoosh(W / 2 + tl / 2 - x.measureText("in one flow.").width, 592, kw, ease(seg(t, 13.7, 14.2)), C.lime, 6);
+  x.globalAlpha = a * ease(seg(t, 13.7, 14.2)); F(400, 20, 1);
+  text("MONGODB  ·  EXPRESS  ·  REACT  ·  NODE  ·  JWT  ·  TAILWIND", W / 2, 690, C.dim, "center");
+  x.globalAlpha = 1;
+}
+
+function draw(t) {
+  t = ((t % T) + T) % T;
+  x.globalAlpha = 1; x.textBaseline = "middle"; bg(t); browse(t); store(t); secure(t); checkout(t); outro(t); slate(t);
+}
+window.renderAt = draw;
+const q = new URLSearchParams(location.search);
+document.fonts.load('800 40px Sora').then(() => document.fonts.load('400 20px "Martian Mono"')).then(() => document.fonts.ready).then(() => {
+  window.ready = true;
+  if (q.has("t")) draw(+q.get("t"));
+  else if (!q.has("render")) { const t0 = performance.now(); (function f(n) { draw((n - t0) / 1000); requestAnimationFrame(f); })(t0); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NetraShield film</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#090c12;display:grid;place-items:center;overflow:hidden}
+canvas{width:min(100vw,100vh*16/9);aspect-ratio:16/9;display:block}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 15 s seamless loop for the portfolio NetraShield card. Content comes from the repo
+// (README loop, server/fixtures/govt_scholarship.html, PII detectors). Bottom ~13% kept calm for the pill/button overlay.
+const W = 1920, H = 1080, T = 15;
+const cv = document.getElementById("c"), x = cv.getContext("2d");
+const C = { bg:"#0a0912", card:"#15121f", card2:"#1c1829", ink:"#f2f2ef", mut:"#a39fb3", dim:"#635e75",
+  vio:"#9b5cff", lav:"#c79bff", org:"#ff7d32", yel:"#ffe14a", grn:"#22c55e", red:"#ff4d5e" };
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = v => 1 - Math.pow(1 - clamp(v), 3);
+const eio = v => (v = clamp(v), v < .5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2);
+const back = v => { v = clamp(v); const c = 1.6; return 1 + (c + 1) * Math.pow(v - 1, 3) + c * Math.pow(v - 1, 2); };
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const env = (t, a, b, f = .4) => Math.min(ease(seg(t, a, a + f)), 1 - eio(seg(t, b - f, b)));
+const lerp = (a, b, k) => a + (b - a) * k;
+const F = (w, s, mono) => x.font = `${w} ${s}px ${mono ? '"Martian Mono"' : "Sora"}, sans-serif`;
+function rr(X, Y, w, h, r, fill, stroke, lw = 1.5) {
+  x.beginPath(); x.roundRect(X, Y, w, h, r);
+  if (fill) { x.fillStyle = fill; x.fill(); }
+  if (stroke) { x.strokeStyle = stroke; x.lineWidth = lw; x.stroke(); }
+}
+function text(s, X, Y, col, align = "left") { x.fillStyle = col; x.textAlign = align; x.fillText(s, X, Y); }
+function swoosh(X, Y, w, k, col, lw = 7) {
+  if (k <= 0) return; x.strokeStyle = col; x.lineWidth = lw; x.lineCap = "round";
+  x.beginPath(); x.moveTo(X, Y); x.quadraticCurveTo(X + w * k / 2, Y - 12, X + w * k, Y); x.stroke();
+}
+function logo(X, Y, s) { // shield with an eye (netra)
+  x.save(); x.translate(X, Y); x.scale(s / 100, s / 100);
+  const g = x.createLinearGradient(0, 0, 100, 110); g.addColorStop(0, C.lav); g.addColorStop(1, C.vio);
+  x.fillStyle = g; x.beginPath(); x.moveTo(50, 0); x.lineTo(96, 16); x.quadraticCurveTo(96, 80, 50, 110); x.quadraticCurveTo(4, 80, 4, 16); x.closePath(); x.fill();
+  x.fillStyle = "#fff"; x.beginPath(); x.moveTo(20, 50); x.quadraticCurveTo(50, 20, 80, 50); x.quadraticCurveTo(50, 80, 20, 50); x.fill();
+  x.fillStyle = "#2a1650"; x.beginPath(); x.arc(50, 50, 13, 0, 7); x.fill();
+  x.fillStyle = "#fff"; x.beginPath(); x.arc(55, 45, 4, 0, 7); x.fill();
+  x.restore();
+}
+function check(X, Y, r, col = C.grn) {
+  x.fillStyle = col; x.beginPath(); x.arc(X, Y, r, 0, 7); x.fill();
+  x.strokeStyle = "#0a0912"; x.lineWidth = r * .24; x.lineCap = "round"; x.beginPath();
+  x.moveTo(X - r * .45, Y); x.lineTo(X - r * .1, Y + r * .38); x.lineTo(X + r * .5, Y - r * .35); x.stroke();
+}
+
+// ---------- data (from the repo) ----------
+const CMD = "Fill the scholarship form and submit it";
+const PLAN = ["Open the scholarship portal", "Fill applicant details", "Confirm & Submit Application"];
+// label, raw value, surrogate (null = not PII)
+const FIELDS = [["Applicant name", "Ananya Sharma", null], ["Email", "ananya.sharma@example.com", "[REDACTED:EMAIL_01]"],
+  ["Mobile number", "9876543210", "[REDACTED:PHONE_01]"], ["Aadhaar number", "2345 6789 0124", "[REDACTED:AADHAAR_01]"],
+  ["PAN", "ABCDE1234F", "[REDACTED:PAN_01]"], ["Course / institution", "B.Tech, Computer Science", null],
+  ["Account password", "••••••••••••", "[PROTECTED INPUT] len=18"], ["One-time code", "778211", "[PROTECTED INPUT] len=6"]];
+const LOOP = ["PERCEIVE", "MASK", "VERIFY", "REASON", "POLICY", "EXECUTE", "CHECK"];
+const STEPS = [[0, 3.4, "01  ASK"], [3.4, 7.2, "02  MASK"], [7.2, 10.6, "03  REASON"], [10.6, 13, "04  APPROVE"]];
+
+// ---------- background + slate ----------
+function bg(t) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, W, H);
+  const p = t / T * Math.PI * 2;
+  for (const [cx, cy, r, col] of [[1500 + Math.cos(p) * 120, 220 + Math.sin(p) * 80, 950, "rgba(155,92,255,.2)"], [300 + Math.sin(p) * 140, 900 + Math.cos(p) * 60, 800, "rgba(255,125,50,.08)"]]) {
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+  }
+  x.fillStyle = "rgba(242,242,239,.05)";
+  for (let gx = 60; gx < W; gx += 48) for (let gy = 60; gy < H; gy += 48) x.fillRect(gx, gy, 2, 2);
+}
+function slate(t) {
+  const a = ease(seg(t, 0, .4)) - eio(seg(t, 12.7, 13.2));
+  if (a <= 0) return; x.globalAlpha = a;
+  F(600, 20, 1); x.textBaseline = "middle";
+  x.fillStyle = C.vio; x.beginPath(); x.arc(146, 82, 6, 0, 7); x.fill();
+  text("NETRASHIELD", 164, 82, C.ink);
+  const st = STEPS.find(s => t >= s[0] && t < s[1]) || STEPS[3];
+  text(st[2], 1780, 82, C.mut, "right");
+  STEPS.forEach(([a0, b0], i) => {
+    const X = 1652 + i * 34; rr(X, 104, 28, 4, 2, "rgba(242,242,239,.15)");
+    const k = seg(t, a0, b0); if (k > 0) rr(X, 104, 28 * k, 4, 2, C.vio);
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 01 ask: one command in the popup ----------
+function ask(t) {
+  const a = env(t, 0, 3.7, .45); if (a <= 0) return;
+  x.textBaseline = "alphabetic";
+  x.globalAlpha = a; F(600, 22, 1); text("VOICE OR TEXT · EN / HI / HINGLISH", 140, 300, C.org);
+  F(800, 92);
+  const l1 = ease(seg(t, .15, .8)), l2 = ease(seg(t, .3, .95));
+  x.globalAlpha = a * l1; text("Say it once.", 140, 410 + (1 - l1) * 30, C.ink);
+  x.globalAlpha = a * l2; text("It browses", 140, 515 + (1 - l2) * 30, C.lav); text("for you.", 140, 620 + (1 - l2) * 30, C.ink);
+  x.globalAlpha = a; swoosh(140, 545, x.measureText("It browses").width, ease(seg(t, 1, 1.5)), C.org);
+  F(400, 26); x.globalAlpha = a * ease(seg(t, .8, 1.3));
+  text("A Chrome agent that sees, plans and clicks,", 140, 720, C.mut); text("without your data leaving the device.", 140, 758, C.mut);
+  // popup
+  x.textBaseline = "middle";
+  const k = back(seg(t, .2, .8)), PX = 1040 + (1 - k) * 60, PY = 190, PW = 740, PH = 640;
+  x.globalAlpha = a * clamp(k);
+  x.shadowColor = "rgba(0,0,0,.6)"; x.shadowBlur = 60; x.shadowOffsetY = 24; rr(PX, PY, PW, PH, 26, C.card); x.shadowColor = "transparent";
+  rr(PX, PY, PW, PH, 26, null, "rgba(199,155,255,.25)");
+  logo(PX + 34, PY + 30, 40); F(700, 26); text("NetraShield", PX + 90, PY + 54, C.ink);
+  x.fillStyle = C.grn; x.beginPath(); x.arc(PX + PW - 230, PY + 54, 6, 0, 7); x.fill();
+  F(400, 16, 1); text("local · 127.0.0.1:8787", PX + PW - 214, PY + 54, C.mut);
+  // mic + waveform
+  const MX = PX + 80, MY = PY + 170, beat = Math.sin(t * 9) * .5 + .5, talk = seg(t, .6, 1.9) > 0 && t < 1.9;
+  for (let r = 0; r < 2; r++) { x.strokeStyle = `rgba(155,92,255,${talk ? .45 - r * .2 : .12})`; x.lineWidth = 2; x.beginPath(); x.arc(MX, MY, 42 + r * 14 + (talk ? beat * 6 : 0), 0, 7); x.stroke(); }
+  x.fillStyle = C.vio; x.beginPath(); x.arc(MX, MY, 36, 0, 7); x.fill();
+  rr(MX - 9, MY - 20, 18, 28, 9, "#fff"); x.strokeStyle = "#fff"; x.lineWidth = 3; x.beginPath(); x.arc(MX, MY + 2, 15, .15, Math.PI - .15); x.moveTo(MX, MY + 17); x.lineTo(MX, MY + 24); x.stroke();
+  for (let i = 0; i < 26; i++) {
+    const hgt = talk ? 8 + Math.abs(Math.sin(t * 11 + i * .9) * Math.sin(i * 1.7 + t * 3)) * 46 : 6;
+    rr(MX + 70 + i * 20, MY - hgt / 2, 8, hgt, 4, i % 3 ? "rgba(199,155,255,.7)" : C.lav);
+  }
+  // typed command
+  const n = Math.floor(CMD.length * seg(t, .7, 1.9));
+  rr(PX + 34, PY + 260, PW - 68, 74, 16, C.card2, "rgba(199,155,255,.35)");
+  F(500, 26); text(CMD.slice(0, n), PX + 60, PY + 297, C.ink);
+  if (t < 2.1 && Math.floor(t * 8) % 2 === 0) { x.fillStyle = C.lav; x.fillRect(PX + 62 + x.measureText(CMD.slice(0, n)).width, PY + 282, 3, 30); }
+  // plan
+  F(600, 16, 1); x.globalAlpha = a * ease(seg(t, 1.9, 2.2)); text("PLANNER · GOALS, NOT SELECTORS", PX + 34, PY + 384, C.mut);
+  PLAN.forEach((p, i) => {
+    const pk = ease(seg(t, 2.05 + i * .2, 2.4 + i * .2)); if (pk <= 0) return;
+    x.globalAlpha = a * pk; const Y = PY + 434 + i * 58;
+    rr(PX + 34 + (1 - pk) * 30, Y - 24, PW - 68, 48, 12, "rgba(155,92,255,.1)");
+    F(600, 17, 1); text(String(i + 1).padStart(2, "0"), PX + 58 + (1 - pk) * 30, Y, C.lav);
+    F(500, 22); text(p, PX + 108 + (1 - pk) * 30, Y, C.ink);
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 02 mask: perceive the page, redact PII on device ----------
+const WX = 140, WY = 150, WW = 1640, WH = 760;
+function mask(t) {
+  const L = t - 3.4; if (t < 3.2 || t > 7.5) return;
+  const a = env(t, 3.3, 7.45, .45), k = ease(seg(t, 3.3, 3.9));
+  x.save(); x.globalAlpha = a; x.translate(0, (1 - k) * 40);
+  x.textBaseline = "middle";
+  x.shadowColor = "rgba(0,0,0,.6)"; x.shadowBlur = 80; x.shadowOffsetY = 30; rr(WX, WY, WW, WH, 24, "#f4f2f8"); x.shadowColor = "transparent";
+  rr(WX, WY, WW, 60, 24, "#e6e2ee"); x.fillStyle = "#e6e2ee"; x.fillRect(WX, WY + 30, WW, 30);
+  ["#ff5f57", "#febc2e", "#28c840"].forEach((c, i) => { x.fillStyle = c; x.beginPath(); x.arc(WX + 32 + i * 24, WY + 30, 7, 0, 7); x.fill(); });
+  rr(WX + WW / 2 - 300, WY + 14, 600, 32, 16, "#fff"); F(400, 17, 1);
+  text("127.0.0.1:8787/fixtures/govt_scholarship", WX + WW / 2, WY + 30, "#5d5870", "center");
+  // page
+  const PX = WX + 70, PY = WY + 110;
+  F(800, 36); text("Rashtriya Chhatra Sahayata Portal", PX, PY, "#1d1530");
+  F(600, 20); text("Applicant details", PX, PY + 52, "#6a6480");
+  const cw = (WW - 140 - 40) / 2;
+  FIELDS.forEach(([lab, val, sur], i) => {
+    const X = PX + (i % 2) * (cw + 40), Y = PY + 100 + Math.floor(i / 2) * 118;
+    F(500, 17); text(lab, X, Y, "#4d4763");
+    rr(X, Y + 18, cw, 58, 10, "#fff", "#d6d1e2");
+    const scan = WY + 80 + seg(L, .35, 1.5) * (WH - 80), hit = scan > Y + 40;
+    if (sur && hit) { // detector fires: box, then black-out with typed surrogate
+      const mk = ease(seg(L, .2 + (Y - WY) / (WH) * 1.15 + .15, .2 + (Y - WY) / WH * 1.15 + .45));
+      rr(X - 4, Y + 14, cw + 8, 66, 12, null, C.org, 3);
+      x.globalAlpha = a * mk; rr(X, Y + 18, cw, 58, 10, "#0f0b18"); F(600, 19, 1); text(sur, X + 22, Y + 47, C.lav);
+      x.globalAlpha = a * (1 - mk); F(500, 22); text(val, X + 22, Y + 47, "#1d1530");
+      x.globalAlpha = a;
+    } else { F(500, 22); text(val, X + 22, Y + 47, "#1d1530"); }
+  });
+  // scan beam
+  const sy = WY + 80 + seg(L, .35, 1.5) * (WH - 80);
+  if (L > .35 && L < 1.6) {
+    const g = x.createLinearGradient(0, sy - 80, 0, sy); g.addColorStop(0, "rgba(155,92,255,0)"); g.addColorStop(1, "rgba(155,92,255,.28)");
+    x.fillStyle = g; x.fillRect(WX, sy - 80, WW, 80); x.fillStyle = C.vio; x.fillRect(WX, sy - 2, WW, 3);
+  }
+  // verdict chip
+  const vk = back(seg(L, 2.0, 2.4));
+  if (vk > 0) {
+    x.globalAlpha = a * clamp(vk); const VX = WX + WW - 520, VY = WY + 92;
+    x.shadowColor = "rgba(0,0,0,.25)"; x.shadowBlur = 30; rr(VX, VY, 460, 92, 18, "#120e1c"); x.shadowColor = "transparent";
+    check(VX + 44, VY + 46, 18);
+    F(700, 20); text("Re-OCR verified · 0 leaks", VX + 80, VY + 34, C.ink);
+    F(400, 15, 1); text("6 fields masked on-device", VX + 80, VY + 64, C.mut);
+  }
+  x.restore(); x.globalAlpha = 1;
+}
+
+// ---------- 03 reason: the loop + one validated action ----------
+const RX = 560, RY = 590, RR = 250;
+function reason(t) {
+  const L = t - 7.2; if (t < 7.0 || t > 10.9) return;
+  const a = env(t, 7.1, 10.85, .45);
+  x.textBaseline = "middle"; x.globalAlpha = a;
+  // ring
+  x.strokeStyle = "rgba(199,155,255,.18)"; x.lineWidth = 2; x.beginPath(); x.arc(RX, RY, RR, 0, 7); x.stroke();
+  const prog = (L * 2.4) % LOOP.length, ang = i => -Math.PI / 2 + i / LOOP.length * Math.PI * 2;
+  x.strokeStyle = C.vio; x.lineWidth = 4; x.lineCap = "round"; x.beginPath(); x.arc(RX, RY, RR, ang(0), ang(0) + prog / LOOP.length * Math.PI * 2 * ease(seg(L, 0, .3))); x.stroke();
+  LOOP.forEach((n, i) => {
+    const nk = back(seg(L, .05 + i * .07, .4 + i * .07)); if (nk <= 0) return;
+    const X = RX + Math.cos(ang(i)) * RR, Y = RY + Math.sin(ang(i)) * RR, on = Math.floor(prog) === i;
+    x.globalAlpha = a * clamp(nk);
+    x.fillStyle = on ? C.vio : C.card2; x.beginPath(); x.arc(X, Y, 15 * nk + (on ? 4 : 0), 0, 7); x.fill();
+    x.strokeStyle = on ? C.lav : "rgba(199,155,255,.4)"; x.lineWidth = 2; x.stroke();
+    const out = Math.cos(ang(i)) >= -.01 ? 1 : -1; F(600, 17, 1);
+    text(n, X + out * 30, Y, on ? C.ink : C.mut, out > 0 ? "left" : "right");
+  });
+  x.globalAlpha = a; logo(RX - 50, RY - 70, 100);
+  F(600, 16, 1); text("THE LOOP", RX, RY + 74, C.mut, "center");
+  // action proposal
+  const PX = 1060, PY = 190;
+  F(600, 20, 1); x.globalAlpha = a * ease(seg(L, .3, .7)); text("REASONER → ACTION PROPOSAL", PX, PY + 10, C.org);
+  const code = [["{", C.mut], ['  "action": "click",', C.ink], ['  "target": "Confirm & Submit',  C.ink], ['             Application",', C.ink], ['  "eid": "e41", "nid": "9f3a1c07",', C.ink], ['  "pii_sent": 0', C.grn], ["}", C.mut]];
+  const ck = ease(seg(L, .4, .8));
+  x.globalAlpha = a * ck; rr(PX, PY + 44, 720, 330, 20, C.card, "rgba(199,155,255,.2)");
+  F(400, 22, 1);
+  code.forEach(([l, col], i) => { const s = .6 + i * .14, n = Math.floor(l.length * clamp((L - s) / .25)); if (n > 0) text(l.slice(0, n), PX + 34, PY + 92 + i * 40, col); });
+  // policy verdict
+  const pk = back(seg(L, 1.9, 2.3));
+  if (pk > 0) {
+    x.globalAlpha = a * clamp(pk); const Y = PY + 410;
+    rr(PX, Y, 720, 140, 20, "rgba(255,77,94,.1)", "rgba(255,77,94,.6)", 2);
+    F(600, 18, 1); text("POLICY ENGINE · DETERMINISTIC", PX + 34, Y + 40, C.red);
+    F(700, 30); text("High risk: submit → ask the human", PX + 34, Y + 92, C.ink);
+  }
+  x.globalAlpha = 1;
+}
+
+// ---------- 04 approve: human says yes, agent finishes ----------
+function approve(t) {
+  const L = t - 10.6; if (t < 10.4 || t > 13.4) return;
+  const a = env(t, 10.5, 13.3, .45), k = back(seg(L, 0, .5));
+  x.textBaseline = "middle";
+  const DW = 860, DH = 470, DX = (W - DW) / 2, DY = 230;
+  const done = ease(seg(L, 1.35, 1.7));
+  x.save(); x.globalAlpha = a * clamp(k); x.translate(W / 2, DY + DH / 2); x.scale(.92 + k * .08, .92 + k * .08); x.translate(-W / 2, -(DY + DH / 2));
+  x.shadowColor = "rgba(0,0,0,.6)"; x.shadowBlur = 80; x.shadowOffsetY = 30; rr(DX, DY, DW, DH, 28, C.card); x.shadowColor = "transparent";
+  rr(DX, DY, DW, DH, 28, null, done > .5 ? "rgba(34,197,94,.6)" : "rgba(199,155,255,.3)", 2);
+  if (done < 1) {
+    x.globalAlpha = a * (1 - done);
+    F(600, 18, 1); text("HUMAN APPROVAL NEEDED", DX + 50, DY + 64, C.org);
+    F(700, 40); text("Submit the application?", DX + 50, DY + 128, C.ink);
+    F(400, 22); text('click "Confirm & Submit Application"', DX + 50, DY + 186, C.mut);
+    text("on govt_scholarship · fee page", DX + 50, DY + 220, C.mut);
+    const press = L > 1.05 && L < 1.25 ? .96 : 1;
+    rr(DX + 50, DY + 330, 240, 76, 18, C.card2, "rgba(242,242,239,.15)"); F(600, 24); text("Deny", DX + 170, DY + 368, C.mut, "center");
+    x.save(); x.translate(DX + DW - 190, DY + 368); x.scale(press, press);
+    rr(-140, -38, 280, 76, 18, C.vio); text("Approve", 0, 0, "#fff", "center"); x.restore();
+  }
+  if (done > 0) {
+    x.globalAlpha = a * done;
+    check(W / 2, DY + 140, 46);
+    F(600, 20, 1); text("TASK_COMPLETED", W / 2, DY + 232, C.grn, "center");
+    F(700, 38); text("Application submitted.", W / 2, DY + 290, C.ink, "center");
+    F(400, 18, 1); text("8 steps · 0 PII sent · audit trail saved", W / 2, DY + 352, C.mut, "center");
+  }
+  x.restore();
+  // cursor glides to Approve and clicks
+  if (L > .4 && L < 1.5) {
+    const ck = eio(seg(L, .4, 1.0)), cx = lerp(1300, DX + DW - 170, ck), cy = lerp(820, DY + 380, ck);
+    x.globalAlpha = a * (1 - seg(L, 1.3, 1.5));
+    if (L > 1.05 && L < 1.4) { x.strokeStyle = "rgba(199,155,255,.7)"; x.lineWidth = 3; x.beginPath(); x.arc(cx, cy, 10 + seg(L, 1.05, 1.4) * 40, 0, 7); x.stroke(); }
+    x.fillStyle = "#fff"; x.strokeStyle = "#0a0912"; x.lineWidth = 2.5; x.beginPath();
+    x.moveTo(cx, cy); x.lineTo(cx, cy + 34); x.lineTo(cx + 9, cy + 26); x.lineTo(cx + 16, cy + 40); x.lineTo(cx + 22, cy + 37); x.lineTo(cx + 15, cy + 23); x.lineTo(cx + 26, cy + 23); x.closePath(); x.fill(); x.stroke();
+  }
+  // proof chips
+  [["347 tests passed", C.grn], ["12 zero-pretence gates", C.lav], ["Chrome MV3", C.org]].forEach(([s, col], i) => {
+    const ck = ease(seg(L, 1.6 + i * .12, 1.9 + i * .12)); if (ck <= 0) return;
+    x.globalAlpha = a * ck; F(500, 19, 1); const w = x.measureText(s).width + 40, X = W / 2 - 390 + i * 270 + (270 - w) / 2;
+    rr(X, 760 + (1 - ck) * 16, w, 46, 23, col + "1f", col + "88"); text(s, X + w / 2, 783 + (1 - ck) * 16, col, "center");
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- outro ----------
+function outro(t) {
+  const a = env(t, 13.1, 15, .5); if (a <= 0) return;
+  x.textBaseline = "middle"; const k = back(seg(t, 13.1, 13.7));
+  x.globalAlpha = a; x.save(); x.translate(W / 2, 430); x.scale(.85 + k * .15, .85 + k * .15);
+  F(800, 120); const tw = x.measureText("NetraShield").width, s = 104, gap = 36, X0 = -(tw + s + gap) / 2;
+  logo(X0, -s / 2 - 8, s); text("NetraShield", X0 + s + gap, 0, C.ink);
+  x.restore();
+  x.globalAlpha = a * ease(seg(t, 13.4, 13.9)); F(400, 38); const tag = "Sees the page. Keeps your data.";
+  text(tag, W / 2, 560, C.mut, "center");
+  const tl = x.measureText(tag).width, kw = x.measureText("Keeps your data").width;
+  swoosh(W / 2 + tl / 2 - x.measureText("Keeps your data.").width, 592, kw, ease(seg(t, 13.7, 14.2)), C.org, 6);
+  x.globalAlpha = a * ease(seg(t, 13.7, 14.2)); F(400, 20, 1);
+  text("CHROME MV3  ·  FASTAPI  ·  TESSERACT.JS  ·  MOBILECLIP  ·  GEMINI", W / 2, 690, C.dim, "center");
+  text("SIH 2024 · PROBLEM 26171 (ISRO)", W / 2, 734, C.dim, "center");
+  x.globalAlpha = 1;
+}
+
+function draw(t) {
+  t = ((t % T) + T) % T;
+  x.globalAlpha = 1; x.textBaseline = "middle"; bg(t); ask(t); mask(t); reason(t); approve(t); outro(t); slate(t);
+}
+window.renderAt = draw;
+const q = new URLSearchParams(location.search);
+document.fonts.load('800 40px Sora').then(() => document.fonts.load('400 20px "Martian Mono"')).then(() => document.fonts.ready).then(() => {
+  window.ready = true;
+  if (q.has("t")) draw(+q.get("t"));
+  else if (!q.has("render")) { const t0 = performance.now(); (function f(n) { draw((n - t0) / 1000); requestAnimationFrame(f); })(t0); }
+});
+</script>
+</body>
+</html>

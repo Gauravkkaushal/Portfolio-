@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CreatorFlow AI film</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#090c12;display:grid;place-items:center;overflow:hidden}
+canvas{width:min(100vw,100vh*16/9);aspect-ratio:16/9;display:block}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 15 s seamless loop for the portfolio "Work" frame. Content comes from CreatorFlow's own demo data (lib/demo-mode.ts).
+// Keep the bottom ~13% calm: the portfolio overlays a pill (bottom-left) and a button (bottom-right) there.
+const W = 1920, H = 1080, T = 15;
+const cv = document.getElementById("c"), x = cv.getContext("2d");
+const C = { bg:"#090c12", card:"#14171e", card2:"#1b1f28", line:"#2a2f3a", ink:"#f2f2ef", mut:"#9aa0aa", dim:"#5d636e",
+  red:"#ff0033", redL:"#ff5c7a", org:"#ff7d32", yel:"#ffe14a", grn:"#22c55e" };
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = v => 1 - Math.pow(1 - clamp(v), 3);
+const eio = v => (v = clamp(v), v < .5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2);
+const back = v => { v = clamp(v); const c = 1.6; return 1 + (c + 1) * Math.pow(v - 1, 3) + c * Math.pow(v - 1, 2); };
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const env = (t, a, b, f = .4) => Math.min(ease(seg(t, a, a + f)), 1 - eio(seg(t, b - f, b)));
+const lerp = (a, b, k) => a + (b - a) * k;
+const F = (w, s, mono) => x.font = `${w} ${s}px ${mono ? '"Martian Mono"' : "Sora"}, sans-serif`;
+function rr(X, Y, w, h, r, fill, stroke, lw = 1.5) {
+  x.beginPath(); x.roundRect(X, Y, w, h, r);
+  if (fill) { x.fillStyle = fill; x.fill(); }
+  if (stroke) { x.strokeStyle = stroke; x.lineWidth = lw; x.stroke(); }
+}
+function text(s, X, Y, col, align = "left") { x.fillStyle = col; x.textAlign = align; x.fillText(s, X, Y); }
+function wrap(s, maxW) {
+  const out = []; let line = "";
+  for (const w of s.split(" ")) { const t2 = line ? line + " " + w : w; if (x.measureText(t2).width > maxW && line) { out.push(line); line = w; } else line = t2; }
+  return line ? [...out, line] : out;
+}
+function swoosh(X, Y, w, k, col, lw = 7) {
+  if (k <= 0) return; x.strokeStyle = col; x.lineWidth = lw; x.lineCap = "round";
+  x.beginPath(); x.moveTo(X, Y); x.quadraticCurveTo(X + w * k / 2, Y - 12, X + w * k, Y); x.stroke();
+}
+function logo(X, Y, s) { // red rounded square with a play triangle, like the app's mark
+  rr(X, Y, s, s, s * .28, C.red);
+  x.fillStyle = "#fff"; x.beginPath(); x.moveTo(X + s * .38, Y + s * .28); x.lineTo(X + s * .74, Y + s * .5); x.lineTo(X + s * .38, Y + s * .72); x.closePath(); x.fill();
+}
+
+// ---------- data (from the repo's demo fixtures) ----------
+const COMMENTS = [
+  ["Alex Chen", "Can you make a video about authentication with JWT?", 45, "#auth", "#4c8dff"],
+  ["Maria Garcia", "How do I handle file uploads in Express? Would love a tutorial!", 38, "#uploads", "#22c55e"],
+  ["James Kim", "What about React Server Components? Are they ready for production?", 41, "#rsc", "#a78bfa"],
+  ["Tom Wilson", "JWT authentication tutorial would be amazing! Struggling with refresh tokens", 26, "#auth", "#4c8dff"],
+  ["David Lee", "Server components are confusing. Can you do a step-by-step tutorial?", 29, "#rsc", "#a78bfa"]];
+const TOPICS = [["JWT Authentication & Security", 23, 92, "#4c8dff"], ["React Server Components", 18, 87, "#a78bfa"], ["File Uploads & Storage", 14, 78, "#22c55e"]];
+const OUTLINE = ["JWT anatomy: header, payload, signature", "Access token generation and validation", "Building a refresh token rotation system", "httpOnly cookies vs localStorage"];
+const NAV = ["Home", "Audience", "Ideas & Projects", "Publishing Calendar", "Live Studio", "Video Library"];
+const STEPS = [[0, 3.4, "01  LISTEN"], [3.4, 7, "02  ANALYZE"], [7, 10.6, "03  PLAN"], [10.6, 13, "04  SCHEDULE"]];
+const CARD = i => ({ X: 1010, Y: 172 + i * 134, w: 770, h: 118 });
+
+// ---------- background + slate ----------
+function bg(t) {
+  x.fillStyle = C.bg; x.fillRect(0, 0, W, H);
+  const p = t / T * Math.PI * 2;
+  for (const [cx, cy, r, col] of [[1500 + Math.cos(p) * 120, 220 + Math.sin(p) * 80, 900, "rgba(255,0,51,.16)"], [300 + Math.sin(p) * 140, 900 + Math.cos(p) * 60, 800, "rgba(255,125,50,.11)"]]) {
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+  }
+  x.fillStyle = "rgba(242,242,239,.05)";
+  for (let gx = 60; gx < W; gx += 48) for (let gy = 60; gy < H; gy += 48) x.fillRect(gx, gy, 2, 2);
+}
+function slate(t) {
+  const a = 1 - eio(seg(t, 12.7, 13.2)) + ease(seg(t, 0, .4)) - 1; // on from 0.4 s, off for the outro
+  if (a <= 0) return; x.globalAlpha = a;
+  F(600, 20, 1); x.textBaseline = "middle";
+  x.fillStyle = C.red; x.beginPath(); x.arc(146, 82, 6, 0, 7); x.fill();
+  text("CREATORFLOW AI", 164, 82, C.ink);
+  const st = STEPS.find(s => t >= s[0] && t < s[1]) || STEPS[3];
+  text(st[2], 1780, 82, C.mut, "right");
+  STEPS.forEach(([a0, b0], i) => { // progress ticks
+    const X = 1652 + i * 34; rr(X, 104, 28, 4, 2, "rgba(242,242,239,.15)");
+    const k = seg(t, a0, b0); if (k > 0) rr(X, 104, 28 * k, 4, 2, C.red);
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 01 listen: comments arrive ----------
+function commentCard(c, i, X, Y, k, t, tagK) {
+  const { w, h } = CARD(i), [name, body, likes, tag, col] = c;
+  rr(X, Y, w, h, 18, C.card, "rgba(242,242,239,.08)");
+  x.fillStyle = col; x.beginPath(); x.arc(X + 50, Y + 46, 24, 0, 7); x.fill();
+  F(700, 22); text(name[0], X + 50, Y + 47, "#fff", "center");
+  F(600, 21); text(name, X + 92, Y + 34, C.ink);
+  F(400, 18, 1); text("♥ " + likes, X + w - 26, Y + 34, C.dim, "right");
+  F(400, 22); wrap(body, w - 120).slice(0, 2).forEach((l, j) => text(l, X + 92, Y + 68 + j * 30, "#c9ccd2"));
+  if (tagK > 0) { // Gemini's label lands on each comment
+    x.globalAlpha *= tagK; F(600, 17, 1); const tw = x.measureText(tag).width + 26;
+    F(600, 21); const nx = X + 92 + x.measureText(name).width + 16; F(600, 16, 1);
+    rr(nx, Y + 20, tw, 28, 14, col + "33", col); text(tag, nx + tw / 2, Y + 35, col, "center"); x.globalAlpha /= tagK;
+  }
+}
+function listen(t) {
+  const a = env(t, 0, 3.6, .45); if (a <= 0) return;
+  x.textBaseline = "alphabetic";
+  x.globalAlpha = a; F(600, 22, 1); text("847 COMMENTS · 46 VIDEOS", 140, 300, C.org);
+  F(800, 92); x.textBaseline = "alphabetic";
+  const l1 = ease(seg(t, .15, .8)), l2 = ease(seg(t, .3, .95));
+  x.globalAlpha = a * l1; text("Your comments", 140, 410 + (1 - l1) * 30, C.ink);
+  x.globalAlpha = a * l2; text("know what's", 140, 515 + (1 - l2) * 30, C.ink);
+  text("next.", 140, 620 + (1 - l2) * 30, C.ink);
+  const nw = x.measureText("next").width; x.globalAlpha = a; swoosh(140, 650, nw, ease(seg(t, 1, 1.5)), C.yel);
+  F(400, 26); x.globalAlpha = a * ease(seg(t, .8, 1.3));
+  text("Every ask, question and complaint,", 140, 730, C.mut); text("buried under the likes.", 140, 768, C.mut);
+  x.textBaseline = "middle";
+  COMMENTS.forEach((c, i) => {
+    const k = back(seg(t, .25 + i * .28, .85 + i * .28)), { X, Y } = CARD(i);
+    x.globalAlpha = a * clamp(k); commentCard(c, i, X + (1 - k) * 80, Y, k, t, ease(seg(t, 2.1 + i * .12, 2.5 + i * .12)));
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 02 analyze: comments collapse into Gemini, topics come out ----------
+const OX = 520, OY = 640;
+function analyze(t) {
+  const L = t - 3.4; if (L < -.2 || t > 7.3) return;
+  const a = env(t, 3.4, 7.2, .3);
+  x.textBaseline = "middle";
+  // particles: each comment card dissolves into dots that fly to the orb
+  COMMENTS.forEach((c, i) => {
+    const { X, Y, w, h } = CARD(i);
+    for (let j = 0; j < 14; j++) {
+      const sx = X + 40 + (j * 53) % (w - 60), sy = Y + 20 + ((j * 37) % (h - 40));
+      const k = eio(seg(L, i * .07 + j * .015, .8 + i * .07 + j * .015));
+      if (k <= 0 || k >= 1) continue;
+      const px = lerp(sx, OX, k), py = lerp(sy, OY, k) - Math.sin(k * Math.PI) * 120;
+      x.globalAlpha = (1 - k * .6) * clamp(L * 5); x.fillStyle = c[4]; x.beginPath(); x.arc(px, py, 6 - k * 3, 0, 7); x.fill();
+    }
+  });
+  x.globalAlpha = a;
+  // heading
+  F(600, 22, 1); text("GEMINI 1.5 FLASH", 140, 230, C.org);
+  F(800, 72); x.textBaseline = "alphabetic";
+  const h1 = ease(seg(L, .1, .6)); x.globalAlpha = a * h1;
+  text("Noise in,", 140, 320 + (1 - h1) * 24, C.ink); text("topics out.", 140, 400 + (1 - h1) * 24, C.ink);
+  x.textBaseline = "middle";
+  // orb
+  const pulse = ease(seg(L, .5, 1.1)), beat = Math.sin(L * 6) * .5 + .5;
+  x.globalAlpha = a;
+  for (let r = 0; r < 4; r++) {
+    const rad = 120 + r * 34 + ((L * 40 + r * 34) % 34);
+    x.strokeStyle = `rgba(255,${60 + r * 30},${60},${(.35 - r * .07) * (.5 + pulse * .5)})`; x.lineWidth = 2;
+    x.beginPath(); x.arc(OX, OY, rad, 0, 7); x.stroke();
+  }
+  const g = x.createRadialGradient(OX - 30, OY - 30, 10, OX, OY, 110 + beat * 6);
+  g.addColorStop(0, "#ffb26b"); g.addColorStop(.45, C.org); g.addColorStop(1, C.red);
+  x.fillStyle = g; x.beginPath(); x.arc(OX, OY, 104 + beat * 6, 0, 7); x.fill();
+  // four-point sparkle
+  x.save(); x.translate(OX, OY); x.rotate(L * .8); x.fillStyle = "#fff"; const s = 44 + beat * 6;
+  x.beginPath(); x.moveTo(0, -s); x.quadraticCurveTo(4, -4, s, 0); x.quadraticCurveTo(4, 4, 0, s); x.quadraticCurveTo(-4, 4, -s, 0); x.quadraticCurveTo(-4, -4, 0, -s); x.fill();
+  x.restore();
+  // topic clusters
+  F(600, 20, 1); x.globalAlpha = a * ease(seg(L, .9, 1.3)); text("TOPIC CLUSTERS · PRIORITY", 1010, 230, C.mut);
+  TOPICS.forEach(([name, n, score, col], i) => {
+    const k = ease(seg(L, 1.0 + i * .3, 1.5 + i * .3)), Y = 290 + i * 190;
+    x.globalAlpha = a * k;
+    rr(1010 + (1 - k) * 60, Y, 770, 160, 22, C.card, i === 0 ? col + "88" : "rgba(242,242,239,.08)", i === 0 ? 2 : 1.5);
+    const X = 1010 + (1 - k) * 60;
+    x.fillStyle = col; x.beginPath(); x.arc(X + 44, Y + 50, 9, 0, 7); x.fill();
+    F(700, 30); text(name, X + 70, Y + 50, C.ink);
+    F(400, 18, 1); text(`${n} comments`, X + 70, Y + 90, C.mut);
+    const bk = eio(seg(L, 1.3 + i * .3, 2.3 + i * .3));
+    rr(X + 70, Y + 118, 560, 10, 5, "rgba(242,242,239,.1)"); rr(X + 70, Y + 118, 560 * score / 100 * bk, 10, 5, col);
+    F(800, 44); text(String(Math.round(score * bk)), X + 730, Y + 100, i === 0 ? C.ink : C.mut, "right");
+  });
+  x.globalAlpha = 1;
+}
+
+// ---------- 03 plan + 04 schedule: inside the app ----------
+const WX = 140, WY = 150, WW = 1640, WH = 760, SB = 330;
+function app(t) {
+  if (t < 6.8 || t > 13.6) return;
+  const a = env(t, 6.8, 13.5, .5), k = ease(seg(t, 6.8, 7.5)), out = eio(seg(t, 12.9, 13.5));
+  x.save(); x.globalAlpha = a;
+  x.translate(W / 2, H / 2); x.scale(lerp(.94, 1, k) - out * .06, lerp(.94, 1, k) - out * .06); x.translate(-W / 2, -H / 2 + (1 - k) * 40);
+  // window chrome
+  x.shadowColor = "rgba(0,0,0,.6)"; x.shadowBlur = 80; x.shadowOffsetY = 30;
+  rr(WX, WY, WW, WH, 24, "#0f0f0f"); x.shadowColor = "transparent";
+  rr(WX, WY, WW, WH, 24, null, "rgba(242,242,239,.12)");
+  ["#ff5f57", "#febc2e", "#28c840"].forEach((c, i) => { x.fillStyle = c; x.beginPath(); x.arc(WX + 32 + i * 24, WY + 30, 7, 0, 7); x.fill(); });
+  const path = t < 10.6 ? "/content-planner" : "/calendar";
+  rr(WX + WW / 2 - 220, WY + 14, 440, 32, 16, "#1b1b1b"); F(400, 17, 1); x.textBaseline = "middle";
+  text("creatorflow.app" + path, WX + WW / 2, WY + 30, C.mut, "center");
+  x.strokeStyle = "rgba(242,242,239,.08)"; x.lineWidth = 1.5;
+  x.beginPath(); x.moveTo(WX, WY + 60); x.lineTo(WX + WW, WY + 60); x.moveTo(WX + SB, WY + 60); x.lineTo(WX + SB, WY + WH); x.stroke();
+  // sidebar
+  logo(WX + 28, WY + 88, 40); F(700, 24); text("CreatorFlow", WX + 82, WY + 109, C.ink);
+  const act = lerp(2, 3, eio(seg(t, 10.5, 10.9)));
+  rr(WX + 18, WY + 168 + act * 56, SB - 36, 46, 12, "rgba(255,0,51,.15)");
+  NAV.forEach((n, i) => {
+    const on = Math.abs(act - i) < .5;
+    rr(WX + 40, WY + 182 + i * 56, 18, 18, 5, null, on ? C.redL : C.dim, 2);
+    F(on ? 600 : 500, 20); text(n, WX + 74, WY + 192 + i * 56, on ? C.ink : C.mut);
+  });
+  rr(WX + 18, WY + WH - 96, SB - 36, 72, 14, "#181818");
+  x.fillStyle = "#7c3aed"; x.beginPath(); x.arc(WX + 54, WY + WH - 60, 18, 0, 7); x.fill();
+  F(700, 16); text("D", WX + 54, WY + WH - 59, "#fff", "center");
+  F(600, 18); text("DevFold Studio", WX + 84, WY + WH - 70, C.ink); F(400, 15, 1); text("28.4K subscribers", WX + 84, WY + WH - 46, C.mut);
+  // main panes
+  const MX = WX + SB + 44, MY = WY + 100;
+  const p1 = 1 - eio(seg(t, 10.5, 10.9)), p2 = ease(seg(t, 10.7, 11.1));
+  if (p1 > 0) { x.globalAlpha = a * p1; plan(t - 7, MX, MY); }
+  if (p2 > 0) { x.globalAlpha = a * p2; calendar(t - 10.6, MX, MY); }
+  x.restore();
+}
+function plan(L, MX, MY) {
+  const base = x.globalAlpha;
+  F(700, 34); text("Ideas & Projects", MX, MY + 10, C.ink);
+  F(500, 17, 1); rr(MX + 330, MY - 6, 220, 32, 16, "rgba(34,197,94,.14)"); text("FROM TOPIC · 92", MX + 440, MY + 10, C.grn, "center");
+  const CX = MX, CY = MY + 60, CW = WX + WW - 44 - MX, CH = 520;
+  rr(CX, CY, CW, CH, 20, "#181818", "rgba(242,242,239,.08)");
+  F(600, 17, 1); text("AI CONTENT IDEA · APPROVED", CX + 36, CY + 44, C.org);
+  F(700, 34); wrap("Complete JWT Authentication in Node.js (Access + Refresh Tokens)", CW - 320).forEach((l, i) => text(l, CX + 36, CY + 98 + i * 46, C.ink));
+  // priority ring
+  const RX = CX + CW - 130, RY = CY + 120, rk = eio(seg(L, .5, 1.6));
+  x.lineCap = "round"; x.lineWidth = 14; x.strokeStyle = "rgba(242,242,239,.1)"; x.beginPath(); x.arc(RX, RY, 70, 0, 7); x.stroke();
+  const rg = x.createLinearGradient(RX - 70, RY - 70, RX + 70, RY + 70); rg.addColorStop(0, C.org); rg.addColorStop(1, C.red);
+  x.strokeStyle = rg; x.beginPath(); x.arc(RX, RY, 70, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * .92 * rk); x.stroke();
+  F(800, 40); text(String(Math.round(92 * rk)), RX, RY - 4, C.ink, "center"); F(400, 14, 1); text("PRIORITY", RX, RY + 30, C.mut, "center");
+  // outline, typed out
+  F(600, 16, 1); text("SCRIPT OUTLINE", CX + 36, CY + 220, C.mut);
+  OUTLINE.forEach((l, i) => {
+    const s = .9 + i * .45, n = Math.floor(l.length * clamp((L - s) / .4));
+    if (L < s) return; const Y = CY + 268 + i * 50;
+    x.globalAlpha = base; F(600, 18, 1); text(String(i + 1).padStart(2, "0"), CX + 36, Y, C.org);
+    F(400, 24); text(l.slice(0, n), CX + 90, Y, "#d6d8dc");
+    if (n < l.length && Math.floor(L * 8) % 2 === 0) { const cw = x.measureText(l.slice(0, n)).width; x.fillStyle = C.org; x.fillRect(CX + 92 + cw, Y - 13, 3, 26); }
+  });
+  // SEO keywords
+  let kx = CX + 36; F(500, 18, 1);
+  ["JWT", "Node.js", "refresh tokens", "API security"].forEach((kw, i) => {
+    const k = back(seg(L, 2.6 + i * .12, 3 + i * .12)); if (k <= 0) return;
+    const w = x.measureText(kw).width + 34; x.globalAlpha = base * clamp(k);
+    rr(kx, CY + CH - 66, w, 38, 19, "rgba(255,125,50,.12)", "rgba(255,125,50,.5)"); text(kw, kx + w / 2, CY + CH - 47, "#ffb48a", "center"); kx += w + 12;
+  });
+  x.globalAlpha = base;
+}
+function calendar(L, MX, MY) {
+  const base = x.globalAlpha;
+  F(700, 34); text("Publishing Calendar", MX, MY + 10, C.ink);
+  F(600, 22); text("November 2026", WX + WW - 44, MY + 10, C.mut, "right");
+  const GX = MX, GY = MY + 56, GW = WX + WW - 44 - MX, cw = GW / 7, chh = 106;
+  F(600, 15, 1); ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].forEach((d, i) => text(d, GX + i * cw + 14, GY + 8, C.dim));
+  const EV = { 6: ["Live Q&A", C.red], 11: ["React 19 recap", "#a78bfa"], 26: ["File uploads", C.grn] };
+  for (let d = 1; d <= 35; d++) {
+    const i = d - 1, cx0 = GX + (i % 7) * cw, cy0 = GY + 30 + Math.floor(i / 7) * (chh + 8);
+    const day = d <= 30 ? d : null, hit = day === 19 && L > 1.15;
+    rr(cx0 + 4, cy0, cw - 8, chh, 12, hit ? "rgba(255,0,51,.12)" : "#151515", hit ? "rgba(255,0,51,.7)" : "rgba(242,242,239,.06)", hit ? 2 : 1.5);
+    if (!day) continue;
+    F(600, 18); text(String(day), cx0 + 20, cy0 + 24, day === 11 ? C.ink : C.mut);
+    if (EV[day]) { F(500, 14); rr(cx0 + 14, cy0 + 60, cw - 36, 30, 8, EV[day][1] + "26"); text(EV[day][0], cx0 + 24, cy0 + 75, EV[day][1]); }
+  }
+  // the JWT idea flies in and lands on Thursday the 19th
+  const ti = 18, tx = GX + (ti % 7) * cw + 14, ty = GY + 30 + Math.floor(ti / 7) * (chh + 8) + 52;
+  const k = eio(seg(L, .3, 1.15)), sx = GX + GW - 300, sy = MY - 30;
+  const fx = lerp(sx, tx, k), fy = lerp(sy, ty, k) - Math.sin(k * Math.PI) * 60, fw = lerp(290, cw - 36, k), fh = lerp(64, 42, k);
+  if (L > .2) {
+    x.globalAlpha = base * clamp((L - .2) * 5);
+    x.shadowColor = "rgba(255,0,51,.5)"; x.shadowBlur = 30 * (1 - k) + 10;
+    rr(fx, fy, fw, fh, 10, C.red); x.shadowColor = "transparent";
+    F(700, lerp(20, 15, k)); text(k > .9 ? "JWT Auth" : "JWT Auth deep dive", fx + 12,fy + fh / 2 - (k > .9 ? 6 : 0), "#fff");
+    if (k > .9) { F(500, 12, 1); text("6:00 PM", fx + 12, fy + fh / 2 + 12, "rgba(255,255,255,.8)"); }
+  }
+  // toast
+  const tk = env(L, 1.3, 2.7, .3);
+  if (tk > 0) {
+    x.globalAlpha = base * tk; const TX = WX + WW - 44 - 380, TY = WY + WH - 110 + (1 - tk) * 20;
+    rr(TX, TY, 380, 70, 16, "#222", "rgba(34,197,94,.5)");
+    x.fillStyle = C.grn; x.beginPath(); x.arc(TX + 36, TY + 35, 13, 0, 7); x.fill();
+    x.strokeStyle = "#0f0f0f"; x.lineWidth = 3; x.beginPath(); x.moveTo(TX + 30, TY + 35); x.lineTo(TX + 35, TY + 40); x.lineTo(TX + 43, TY + 30); x.stroke();
+    F(600, 19); text("Scheduled for Thu, 19 Nov", TX + 62, TY + 35, C.ink);
+  }
+  x.globalAlpha = base;
+}
+
+// ---------- outro ----------
+function outro(t) {
+  const a = env(t, 13.1, 15, .5); if (a <= 0) return;
+  x.textBaseline = "middle"; const k = back(seg(t, 13.1, 13.7));
+  x.globalAlpha = a; x.save(); x.translate(W / 2, 430); x.scale(.85 + k * .15, .85 + k * .15);
+  F(800, 120); const tw = x.measureText("CreatorFlow AI").width, s = 104, gap = 36, X0 = -(tw + s + gap) / 2;
+  logo(X0, -s / 2 - 4, s); text("CreatorFlow AI", X0 + s + gap, 0, C.ink);
+  x.restore();
+  x.globalAlpha = a * ease(seg(t, 13.4, 13.9)); F(400, 38); text("From audience insights to action.", W / 2, 560, C.mut, "center");
+  const tl = x.measureText("From audience insights to action.").width, aw = x.measureText("action").width;
+  swoosh(W / 2 + tl / 2 - x.measureText("action.").width, 592, aw, ease(seg(t, 13.7, 14.2)), C.yel, 6);
+  x.globalAlpha = a * ease(seg(t, 13.7, 14.2)); F(400, 20, 1);
+  text("NEXT.JS 15  ·  GEMINI  ·  MONGODB  ·  YOUTUBE DATA API  ·  NEXTAUTH", W / 2, 690, C.dim, "center");
+  x.globalAlpha = 1;
+}
+
+function draw(t) {
+  t = ((t % T) + T) % T;
+  x.globalAlpha = 1; x.textBaseline = "middle"; bg(t); listen(t); analyze(t); app(t); outro(t); slate(t);
+}
+window.renderAt = draw;
+const q = new URLSearchParams(location.search);
+document.fonts.load('800 40px Sora').then(() => document.fonts.load('400 20px "Martian Mono"')).then(() => document.fonts.ready).then(() => {
+  window.ready = true;
+  if (q.has("t")) draw(+q.get("t"));
+  else if (!q.has("render")) { const t0 = performance.now(); (function f(n) { draw((n - t0) / 1000); requestAnimationFrame(f); })(t0); }
+});
+</script>
+</body>
+</html>
